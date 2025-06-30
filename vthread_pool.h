@@ -1,8 +1,9 @@
-#ifndef _VTHREAD_POOL_
-#define _VTHREAD_POOL_
+#ifndef _V_THREAD_POOL_H
+#define _V_THREAD_POOL_H
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "vutil.h"
 
 typedef struct vtask_list vtask_list;
 typedef enum vthread_state vthread_state;
@@ -38,10 +39,10 @@ struct vtask {
 // NOTE(victor): FIFO
 struct vtask_list {
   vtask* Items;
-  uint64_t Count;
-  uint64_t WriteCursor;
-  uint64_t ReadCursor;
-  uint64_t Capacity;
+  u64 Count;
+  u64 WriteCursor;
+  u64 ReadCursor;
+  u64 Capacity;
 };
 
 struct vthread {
@@ -52,8 +53,8 @@ struct vthread {
 
 struct vthread_list {
   vthread* Items;
-  uint64_t Count;
-  uint64_t Capacity;
+  u64 Count;
+  u64 Capacity;
 };
 
 struct vthread_pool {

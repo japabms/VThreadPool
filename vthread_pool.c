@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <stdio.h>
 
+// Some prototypes.
 static bool VThreadPool_IsAllThreadsInfinite(vthread_pool* Pool);
 static void VThreadPool_AddThread(vthread_pool* Pool);
 
@@ -34,7 +35,7 @@ inline static void VThreadList_Push(vthread_list* List, vthread* Thread) {
 inline static void VTask_Init(vtask* Task,
 			      vtask_proc Procedure,
 			      vtask_argument* Arg,
-			      vtask_proc_attr Attr){
+			      vtask_proc_attr Attr) {
   Task->Arg = Arg;
   Task->Procedure = Procedure;
   Task->Attr = Attr;
@@ -55,22 +56,23 @@ static void VTaskList_Enqueue(vthread_pool* Pool, vtask_list* List, vtask Task) 
   // [] TODO: Make the threadpool add a thread every time the user adds a infinite
   // procedure, to make the first assign value num threads to be valid
   // [] TODO: Set a max number thread that can be created.
-
+  pthread_mutex_lock(Pool->Lock);
   if(VThreadPool_IsAllThreadsInfinite(Pool)) {
     VThreadPool_AddThread(Pool);
   }
 
-  pthread_mutex_lock(Pool->Lock);
+
   while(List->Count == List->Capacity) {
     pthread_cond_wait(Pool->ThreadDone, Pool->Lock);
   }
-  pthread_mutex_unlock(Pool->Lock);
+
 
   
   List->Items[List->WriteCursor] = Task;
   List->WriteCursor = (List->WriteCursor + 1) % List->Capacity;
 
   List->Count += 1;
+  pthread_mutex_unlock(Pool->Lock);
 }
 
 inline static vtask VTaskList_Dequeue(vtask_list* List) {
@@ -99,7 +101,7 @@ static vtask_argument* VThread_Main(vtask_argument* Arg) {
   vthread* Thread = (vthread*)Arg;
   pthread_detach(Thread->Id);
   vthread_pool* Pool = Thread->Pool;
-  vtask Task = {};
+  vtask Task;
 
   pthread_mutex_lock(Pool->Lock);
   Pool->ThreadCount += 1;
@@ -141,7 +143,9 @@ static vtask_argument* VThread_Main(vtask_argument* Arg) {
 	pthread_mutex_unlock(Pool->Lock);
       } else if(Task.Attr == PROC_DEFAULT) {
 	// printf("[Thread %lu] else kk %d\n", Thread->Id, Task.Attr);
-	Pool->NormalThreadsWorking += 1;	
+	pthread_mutex_lock(Pool->Lock);
+	Pool->NormalThreadsWorking += 1;
+	pthread_mutex_unlock(Pool->Lock);
       }
       
       // Run the task.
@@ -187,8 +191,9 @@ vthread_pool* VThreadPool_Init(uint32_t NumThreads) {
   VTaskList_Init(Result->TaskList, NumThreads);
   VThreadList_Init(Result->Threads, NumThreads);
 
-  vthread Threads[NumThreads] = {};
-  for(uint64_t I = 0; I < NumThreads; I++) {
+  vthread Threads[NumThreads];
+  
+  for(u64 I = 0; I < NumThreads; I++) {
     VThread_Init(&Threads[I], Result);
     VThreadList_Push(Result->Threads, &Threads[I]);
     pthread_create(&Result->Threads->Items[I].Id,
@@ -224,7 +229,7 @@ static bool VThreadPool_IsAnyThreadInfinite(vthread_pool* Pool) {
 }
 
 static bool VThreadPool_IsAllThreadsInfinite(vthread_pool* Pool) {
-  uint32_t Count;
+  uint32_t Count = 0;
   for(int I = 0; I < Pool->Threads->Count; I++) {
     if(Pool->Threads->Items[I].State == THREAD_INFINITE) {
       Count += 1;
@@ -239,7 +244,7 @@ static bool VThreadPool_IsAllThreadsInfinite(vthread_pool* Pool) {
 }
 
 static void VThreadPool_AddThread(vthread_pool* Pool) {
-  vthread Thread = {};
+  vthread Thread = {0};
   VThread_Init(&Thread, Pool);
   VThreadList_Push(Pool->Threads, &Thread);
   pthread_create(&Pool->Threads->Items[Pool->Threads->Count - 1].Id,
@@ -247,7 +252,6 @@ static void VThreadPool_AddThread(vthread_pool* Pool) {
 		 VThread_Main,
 		 &Pool->Threads->Items[Pool->Threads->Count - 1]);
 }
-
 
 void VThreadPool_Wait(vthread_pool* Pool) {
   pthread_mutex_lock(Pool->Lock);
